@@ -21,6 +21,7 @@ func init() {
 	}
 }
 
+// User-Struktur für JSON und DB
 type User struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
@@ -30,6 +31,7 @@ type User struct {
 	Highscore        int    `json:"highscore"`
 }
 
+// Benutzer abrufen
 func getUsers(c *gin.Context) {
 	rows, err := db.Query("SELECT id, name, password, points, longest_win_streak, highscore FROM \"user\"")
 	if err != nil {
@@ -50,7 +52,7 @@ func getUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
-// API-Endpunkt, um einen neuen Benutzer zu erstellen
+// Benutzer registrieren
 func createUser(c *gin.Context) {
 	var newUser User
 	if err := c.BindJSON(&newUser); err != nil {
@@ -58,7 +60,6 @@ func createUser(c *gin.Context) {
 		return
 	}
 
-	// Benutzer in die DB einfügen
 	query := `INSERT INTO "user" (name, password, points, longest_win_streak, highscore) 
 			  VALUES ($1, $2, $3, $4, $5) RETURNING id`
 	err := db.QueryRow(query, newUser.Name, newUser.Password, newUser.Points, newUser.LongestWinStreak, newUser.Highscore).Scan(&newUser.ID)
@@ -70,11 +71,10 @@ func createUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, newUser)
 }
 
-// API-Endpunkt, um einen Benutzer nach Namen zu löschen
+// Benutzer löschen
 func deleteUser(c *gin.Context) {
 	name := c.Param("name")
 
-	// Löschen des Benutzers aus der DB
 	_, err := db.Exec("DELETE FROM \"user\" WHERE name=$1", name)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -84,21 +84,48 @@ func deleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted"})
 }
 
+// Login-Endpunkt
+func loginUser(c *gin.Context) {
+	var credentials struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&credentials); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Ungültige Eingabe"})
+		return
+	}
+
+	var user User
+	query := `SELECT id, name, password, points, longest_win_streak, highscore FROM "user" WHERE name=$1`
+	err := db.QueryRow(query, credentials.Username).Scan(&user.ID, &user.Name, &user.Password, &user.Points, &user.LongestWinStreak, &user.Highscore)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Benutzer nicht gefunden"})
+		return
+	}
+
+	if user.Password != credentials.Password {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Falsches Passwort"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// Hauptfunktion
 func main() {
-	// Gin-Router initialisieren
 	r := gin.Default()
 
-	// CORS-Middleware aktivieren
+	// CORS aktivieren (Frontend-Zugriff)
 	r.Use(cors.Default())
 
-	// API-Endpunkte
+	// API-Routen
 	r.GET("/users", getUsers)
 	r.POST("/users", createUser)
 	r.DELETE("/users/:name", deleteUser)
+	r.POST("/login", loginUser)
 
 	// Server starten
-	err := r.Run(":8080")
-	if err != nil {
+	if err := r.Run(":8080"); err != nil {
 		log.Fatal("Fehler beim Starten des Servers:", err)
 	}
 }
