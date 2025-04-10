@@ -30,7 +30,6 @@ type User struct {
 	Highscore        int    `json:"highscore"`
 }
 
-// API-Endpunkt, um alle Benutzer zu erhalten
 func getUsers(c *gin.Context) {
 	rows, err := db.Query("SELECT id, name, password, points, longest_win_streak, highscore FROM \"user\"")
 	if err != nil {
